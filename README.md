@@ -10,7 +10,7 @@ Visit the live application at [www.hurricanecontrol.com](http://www.hurricanecon
 
 ## Application Screenshot
 
-![Hurricane Control Center Screenshot](Site Screenshot.PNG)
+![Hurricane Control Center Screenshot](/Site Screenshot.PNG)
 
 *The Hurricane Control Center web interface, showing real-time hurricane threat information and user registration options.*
 
