@@ -1,0 +1,215 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Hurricane Notification System Infrastructure - Professional Portfolio Skeleton'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment
+
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket to store the static website
+
+Resources:
+  # DynamoDB Table
+  UserSubscriptionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub HurricaneNotificationUsers-${Environment}
+      AttributeDefinitions:
+        - AttributeName: contact
+          AttributeType: S
+        - AttributeName: location
+          AttributeType: S
+      KeySchema:
+        - AttributeName: contact
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: LocationIndex
+          KeySchema:
+            - AttributeName: location
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # S3 Bucket for static website with enhanced security
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  # Lambda Execution Role with least privilege
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                Resource: 
+                  - !GetAtt UserSubscriptionsTable.Arn
+                  - !Sub ${UserSubscriptionsTable.Arn}/index/*
+        - PolicyName: SNSPublish
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref NotificationTopic
+
+  # SNS Topic for notifications
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub hurricane-notifications-${Environment}
+      KmsMasterKeyId: alias/aws/sns
+
+  # Lambda Function for Hurricane Notification
+  HurricaneNotificationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub HurricaneNotificationFunction-${Environment}
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+              # Placeholder for hurricane notification logic
+              print("Hurricane notification function executed")
+              return {"statusCode": 200, "body": "Function executed successfully"}
+      Runtime: python3.8
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref UserSubscriptionsTable
+          SNS_TOPIC_ARN: !Ref NotificationTopic
+          ENVIRONMENT: !Ref Environment
+
+  # EventBridge Rule for daily execution
+  DailyExecutionRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Trigger Hurricane Notification Function daily at 8 AM EST"
+      ScheduleExpression: "cron(0 13 * * ? *)"  # 8 AM EST is 13:00 UTC
+      State: ENABLED
+      Targets: 
+        - Arn: !GetAtt HurricaneNotificationFunction.Arn
+          Id: "HurricaneNotificationFunction"
+
+  # Permission for EventBridge to invoke Lambda
+  PermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref HurricaneNotificationFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt DailyExecutionRule.Arn
+
+  # API Gateway with Lambda proxy integration
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub HurricaneNotificationAPI-${Environment}
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # API Gateway Lambda Proxy Resource
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: '{proxy+}'
+      RestApiId: !Ref ApiGateway
+
+  # API Gateway ANY Method
+  ApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: ANY
+      ResourceId: !Ref ApiResource
+      RestApiId: !Ref ApiGateway
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !GetAtt HurricaneNotificationFunction.Arn
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: ApiMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: !Ref Environment
+
+  # CloudWatch Log Group for API Gateway
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/${ApiGateway}
+      RetentionInDays: 30
+
+Outputs:
+  UserSubscriptionsTableName:
+    Description: Name of the DynamoDB table for user subscriptions
+    Value: !Ref UserSubscriptionsTable
+
+  WebsiteBucketName:
+    Description: Name of the S3 bucket hosting the static website
+    Value: !Ref WebsiteBucket
+
+  NotificationTopicArn:
+    Description: ARN of the SNS topic for notifications
+    Value: !Ref NotificationTopic
+
+  HurricaneNotificationFunctionArn:
+    Description: ARN of the Lambda function for hurricane notifications
+    Value: !GetAtt HurricaneNotificationFunction.Arn
+
+  ApiGatewayUrl:
+    Description: URL of the API Gateway endpoint
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
+
+  Environment:
+    Description: Current deployment environment
+    Value: !Ref Environment
