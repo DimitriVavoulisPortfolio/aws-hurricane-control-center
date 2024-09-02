@@ -4,7 +4,7 @@ Author: Dimitri Vavoulis
 
 ## Project Overview
 
-The Hurricane Control Center is an advanced system that provides real-time monitoring and notifications about potential hurricane threats to users in Puerto Rico and Florida. It leverages NOAA data to analyze, visualize, and notify subscribers about approaching storms. The system is built using AWS services, demonstrating cloud architecture skills and the ability to create practical, user-focused applications. The core functionality runs daily at 8 AM EST to ensure up-to-date information.
+The Hurricane Control Center is an advanced system that provides real-time monitoring and notifications about potential hurricane threats to users in Puerto Rico and Florida. It leverages NOAA data to analyze, visualize, and notify subscribers about approaching storms. The system is built using AWS services, demonstrating cloud architecture skills and the ability to create practical, user-focused applications. The core functionality runs daily at 8 AM EST to ensure up-to-date information. This is currently at stage 2, it will be further developed over time.
 
 Visit the live application at [www.hurricanecontrol.com](http://www.hurricanecontrol.com)
 
