@@ -1,4 +1,4 @@
-# Hurricane Control Center
+# Hurricane Control Center v2.1.0
 
 Author: Dimitri Vavoulis
 
